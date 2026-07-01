@@ -1,8 +1,16 @@
 package wzlib
 
+import (
+	"encoding/binary"
+	"errors"
+	"fmt"
+	"image"
+)
+
 type wzCanvas struct {
 	IWzNode
 
+	unkFlag     int8
 	prop        IWzProperty
 	width       int32
 	height      int32
@@ -20,7 +28,7 @@ func NewWzCanvas(parent IWzNode) IWzCanvas {
 
 // DeSerialize implements [IWzCanvas].
 func (n *wzCanvas) DeSerialize(stream IWzStream) {
-	stream.Skip(1)
+	n.unkFlag = stream.Decode1()
 	hasProperty := stream.DecodeBool()
 	if hasProperty {
 		n.prop = NewWzProperty(n.GetParent())
@@ -33,12 +41,12 @@ func (n *wzCanvas) DeSerialize(stream IWzStream) {
 	n.magLevel = stream.Decode1()
 	n.levelMap = CanvasLevelMap(stream.Decode4())
 	dataLen := stream.Decode4()
-	n.data = stream.DecodeBuffer(int64(dataLen)) // zlib with deflate
+	n.data = stream.DecodeBuffer(int64(dataLen))
 }
 
 // Serialize implements [IWzCanvas].
 func (n *wzCanvas) Serialize(archive IWzArchive) {
-	archive.Encode1(0)
+	archive.Encode1(n.unkFlag)
 	archive.EncodeBool(n.prop != nil)
 	if n.prop != nil {
 		n.prop.Serialize(archive)
@@ -115,4 +123,63 @@ func (n *wzCanvas) GetData() []byte {
 // SetData implements [IWzCanvas].
 func (n *wzCanvas) SetData(data []byte) {
 	n.data = data
+}
+
+// GetRawData implements [IWzCanvas].
+func (n *wzCanvas) GetRawData() ([]byte, error) {
+	dataLen := len(n.data)
+	if dataLen < 3 {
+		return nil, fmt.Errorf("invalid data len %d", dataLen)
+	}
+	block := make([]byte, dataLen-1)
+	copy(block, n.data[1:])
+	isZlib := IsZlibHeader(binary.BigEndian.Uint16(n.data[1:3]))
+	if !isZlib {
+		stream := n.GetRootNode().GetStream()
+		if stream == nil {
+			return nil, errors.New("faield to get stream")
+		}
+		block = stream.DecryptBlock(block)
+	}
+	raw, err := ZlibInflate(block)
+	if err != nil {
+		return nil, err
+	}
+	return raw, nil
+}
+
+// ExtractImage implements [IWzCanvas].
+func (n *wzCanvas) ExtractImage() (*image.RGBA, error) {
+	raw, err := n.GetRawData()
+	if err != nil {
+		return nil, err
+	}
+	var pix []byte
+	width := int(n.width)
+	height := int(n.height)
+	switch n.pixelFormat {
+	case CPARGB8888:
+		pix, err = DecodeARGB8888(raw, width, height)
+	case CPARGB4444, CPARGB4444T:
+		pix, err = DecodeARGB4444(raw, width, height)
+	case CPARGB1555:
+		pix, err = DecodeARGB1555(raw, width, height)
+	case CPRGB565, CPRGB565T:
+		pix, err = DecodeRGB565(raw, width, height)
+	case CPDXT3:
+		pix, err = DecodeDXT3(raw, width, height)
+	case CPDXT5:
+		pix, err = DecodeDXT5(raw, width, height)
+	default:
+		return nil, fmt.Errorf("unsupported pixel format %d", n.pixelFormat)
+	}
+	if err != nil {
+		return nil, err
+	}
+	rgbaImg := &image.RGBA{
+		Pix:    pix,
+		Stride: width * 4,
+		Rect:   image.Rect(0, 0, width, height),
+	}
+	return rgbaImg, nil
 }

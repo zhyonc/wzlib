@@ -220,7 +220,7 @@ func (n *wzNode) GetChild(name string) (IWzNode, error) {
 
 // GetChildByPath implements [IWzNode].
 func (n *wzNode) GetChildByPath(nodePath string) (IWzNode, error) {
-	paths := strings.Split(nodePath, DefaultNodePathSeparator)
+	paths := strings.Split(nodePath, NodePathSeparator)
 	if len(paths) == 0 {
 		return nil, fmt.Errorf("invalid node path %s", nodePath)
 	}
@@ -230,4 +230,31 @@ func (n *wzNode) GetChildByPath(nodePath string) (IWzNode, error) {
 // AddChild implements [IWzNode].
 func (n *wzNode) AddChild(node IWzNode) {
 	n.childs.Set(node.GetName(), node)
+}
+
+// ParseDirectory implements [IWzNode].
+func (n *wzNode) ParseDirectory() (IWzDirectory, error) {
+	dir, ok := n.delegate.(IWzDirectory)
+	if !ok {
+		return nil, fmt.Errorf("failed to assert IWzDirectory for node %s", n.GetName())
+	}
+	return dir, nil
+}
+
+// ParseImage implements [IWzNode].
+func (n *wzNode) ParseImage() (IWzImage, error) {
+	img, ok := n.delegate.(IWzImage)
+	if !ok {
+		return nil, fmt.Errorf("failed to assert IWzImage for node %s", n.GetName())
+	}
+	return img, nil
+}
+
+// ParseItem implements [IWzNode].
+func (n *wzNode) ParseItem() (IWzPropertyItem, error) {
+	item, ok := n.delegate.(IWzPropertyItem)
+	if !ok {
+		return nil, fmt.Errorf("failed to assert IWzPropertyItem for node %s", n.GetName())
+	}
+	return item, nil
 }

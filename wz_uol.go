@@ -5,6 +5,7 @@ import "log/slog"
 type wzUOL struct {
 	IWzNode
 
+	unkFlag   int8
 	valueflag FlagType
 	valueRef  int32
 	value     string
@@ -18,7 +19,7 @@ func NewWzUOL(parent IWzNode) IWzUOL {
 
 // DeSerialize implements [IWzUOL].
 func (n *wzUOL) DeSerialize(stream IWzStream) {
-	stream.Skip(1)
+	n.unkFlag = stream.Decode1()
 	n.valueflag = FlagType(stream.Decode1())
 	switch n.valueflag {
 	case FlagVTStr:
@@ -34,7 +35,7 @@ func (n *wzUOL) DeSerialize(stream IWzStream) {
 
 // Serialize implements [IWzUOL].
 func (n *wzUOL) Serialize(archive IWzArchive) {
-	archive.Encode1(0)
+	archive.Encode1(n.unkFlag)
 	archive.Encode1(int8(n.valueflag))
 	switch n.valueflag {
 	case FlagVTStr:

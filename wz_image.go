@@ -24,7 +24,14 @@ func (img *wzImage) DeSerialize(stream IWzStream) {
 		img.SetName(stream.DecryptVTStr())
 	case NodeImageRef:
 		nameRef := stream.Decode4()
-		name := stream.DecryptVTStrRef(nameRef, img.GetRootNode().GetHeaderSize()+1)
+		var name string
+		if img.GetRootNode().GetVersion() == NoHashVersion {
+			// If the data offset isn't corrected
+			// GMS232 Character.wz/Shoes/01073238.img and 01073239.img will display ぞ㘱㜶⤰
+			name = stream.DecryptVTStrRef(nameRef, img.GetRootNode().GetHeaderSize()+2)
+		} else {
+			name = stream.DecryptVTStrRef(nameRef, img.GetRootNode().GetHeaderSize()+1)
+		}
 		img.SetNameRef(nameRef)
 		img.SetName(name)
 	default:

@@ -183,6 +183,38 @@ func (s *wzStream) DecryptBuffer(bufLen int64) []byte {
 	return buf
 }
 
+// DecryptBlock implements [IWzStream].
+func (s *wzStream) DecryptBlock(block []byte) []byte {
+	blockLen := len(block)
+	if blockLen < 2 {
+		return nil
+	}
+	newBlock := make([]byte, 0, 2)
+	newBlock = append(newBlock, block[:2]...)
+	offset := 2
+	for offset < blockLen {
+		if offset+4 > blockLen {
+			break
+		}
+		// Read buf len
+		bufLen := int(binary.LittleEndian.Uint32(block[offset : offset+4]))
+		offset += 4
+		if offset+bufLen > blockLen {
+			break
+		}
+		// Read buf
+		buf := make([]byte, bufLen)
+		copy(buf, block[offset:offset+bufLen])
+		offset += bufLen
+		// Decrypt buf
+		if s.aesCipher != nil {
+			s.aesCipher.Decrypt(buf)
+		}
+		newBlock = append(newBlock, buf...)
+	}
+	return newBlock
+}
+
 // DecodeStr implements [IWzStream].
 func (s *wzStream) DecodeStr(strLen int64) string {
 	if strLen <= 0 {
@@ -285,7 +317,7 @@ func (s *wzStream) DecryptVTStr() string {
 func (s *wzStream) DecryptVTStrRef(ref int32, dataOffset int32) string {
 	var str string
 	backOffset := s.offset
-	s.offset = int64(dataOffset + ref)
+	s.offset = int64(ref + dataOffset)
 	str = s.DecryptVTStr()
 	s.offset = backOffset
 	return str

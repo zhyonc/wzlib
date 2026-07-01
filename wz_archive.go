@@ -104,7 +104,10 @@ func (a *wzArchive) EncodeVTLen(n any) bool {
 		a.Encode1(-math.MaxInt8 - 1) // -128(0x80)
 		return true
 	case float32:
-		if v == float32(0) {
+		bits := math.Float32bits(v)
+		if bits == 0 {
+			// +0.0 (00 00 00 00)
+			// -0.0 (00 00 00 80)
 			a.Encode1(0)
 			return false
 		}

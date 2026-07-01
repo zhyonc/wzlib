@@ -2,7 +2,7 @@
 # https://github.com/github/gitignore/blob/main/community/Golang/Go.AllowList.gitignore
 #
 # Binaries for programs and plugins
-*.exe
+*.exe*
 *.exe~
 *.dll
 *.so
@@ -24,8 +24,27 @@ go.work.sum
 # env file
 .env
 
-# temp file
+# cache file
 Data/*
+!Data/Folder
+Data/Folder/*
+!Data/Single
+Data/Single/*
+!Data/Split
+Data/Split/*
 Temp/*
+!Temp/Folder
+Temp/Folder/*
+!Temp/Single
+Temp/Single/*
+!Temp/Split
+Temp/Split/*
 *.wz
+*.png
+*.mp3
+*.wav
+*.bin
+*.ttf
+*.otf
+*.skel
 !.gitkeep

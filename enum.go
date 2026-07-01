@@ -1,5 +1,7 @@
 package wzlib
 
+import "compress/flate"
+
 // #region Region
 
 type Region uint8
@@ -52,7 +54,6 @@ const (
 	NodeNameSoundDX8 NodeNameTag = "Sound_DX8"
 	NodeNameUOL      NodeNameTag = "UOL"
 	NodeNameRawData  NodeNameTag = "RawData"
-	NodeNameScript   NodeNameTag = "Script"
 )
 
 // #endregion
@@ -131,12 +132,33 @@ const (
 
 // #endregion
 
+// #region Zlib
+
+type ZlibHeader uint16
+
+const (
+	ZlibNoCompressionHeader      ZlibHeader = 0x7801
+	ZlibBestSpeedHeader          ZlibHeader = 0x785E
+	ZlibBestCompressionHeader    ZlibHeader = 0x78DA
+	ZlibDefaultCompressionHeader ZlibHeader = 0x789C
+)
+
+type ZlibLevel int
+
+const (
+	ZlibNoCompression      ZlibLevel = flate.NoCompression
+	ZlibBestSpeedLevel     ZlibLevel = flate.BestSpeed
+	ZlibBestCompression    ZlibLevel = flate.BestCompression
+	ZlibDefaultCompression ZlibLevel = flate.DefaultCompression
+)
+
+// #endregion
+
 // #region Canvas
 
 type CanvasPixformat int32
 
 const (
-	CPUnknown   CanvasPixformat = 0
 	CPARGB4444  CanvasPixformat = 1
 	CPARGB8888  CanvasPixformat = 2
 	CPARGB4444T CanvasPixformat = 3
@@ -159,44 +181,6 @@ const (
 	CLUSE56OVER2 CanvasLevelMap = 131585
 )
 
-type CanvasAlphaType int32
-
-const (
-	CAOverWrite   CanvasAlphaType = -1
-	CARemoveAlpha CanvasAlphaType = -2
-)
-
-type CanvasColor int32
-
-const (
-	CCTransparent CanvasColor = 0xFFFFFF
-)
-
-type CanvasDitherType int32
-
-const (
-	CDNone CanvasDitherType = iota
-	CDFS0
-	CDFS1
-	CDFS
-)
-
-const (
-	CDFD0 CanvasDitherType = iota + 17
-	CDFD1
-	CDFD
-)
-
-type Gr2DAniType int32
-
-const (
-	GAStop   Gr2DAniType = 0
-	GAWait   Gr2DAniType = 256
-	GANormal Gr2DAniType = 0
-	GAFirst  Gr2DAniType = 16
-	GARepeat Gr2DAniType = 32
-)
-
 // #endregion
 
 // #region Sound
@@ -204,10 +188,8 @@ const (
 type SoundType int8
 
 const (
-	SoundUnknown SoundType = iota
-	SoundMP3
-	SoundPCM
-	SoundBinary
+	SoundMP3 SoundType = iota + 1
+	SoundWave
 )
 
 const (

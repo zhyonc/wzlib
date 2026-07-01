@@ -1,6 +1,8 @@
 package wzlib
 
-import "log/slog"
+import (
+	"log/slog"
+)
 
 type wzProperty struct {
 	IWzNode

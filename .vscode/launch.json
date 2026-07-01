@@ -5,6 +5,28 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "LoadCustomWzFile",
+            "type": "go",
+            "request": "launch",
+            "mode": "test",
+            "program": "${workspaceFolder}",
+            "args": [
+                "-test.run=^(TestLoadCustomWzFile)$",
+                "-test.v"
+            ]
+        },
+        {
+            "name": "CopyCustomWzFile",
+            "type": "go",
+            "request": "launch",
+            "mode": "test",
+            "program": "${workspaceFolder}",
+            "args": [
+                "-test.run=^(TestCopyCustomWzFile)$",
+                "-test.v"
+            ]
+        },
+        {
             "name": "LoadWzFile",
             "type": "go",
             "request": "launch",
@@ -16,17 +38,6 @@
             ]
         },
         {
-            "name": "LoadWzFiles",
-            "type": "go",
-            "request": "launch",
-            "mode": "test",
-            "program": "${workspaceFolder}",
-            "args": [
-                "-test.run=^(TestLoadWzFiles)$",
-                "-test.v"
-            ]
-        },
-        {
             "name": "LoadWzDir",
             "type": "go",
             "request": "launch",
@@ -34,6 +45,17 @@
             "program": "${workspaceFolder}",
             "args": [
                 "-test.run=^(TestLoadWzDir)$",
+                "-test.v"
+            ]
+        },
+        {
+            "name": "CreateWzFile",
+            "type": "go",
+            "request": "launch",
+            "mode": "test",
+            "program": "${workspaceFolder}",
+            "args": [
+                "-test.run=^(TestCreateWzFile)$",
                 "-test.v"
             ]
         },
@@ -60,35 +82,46 @@
             ]
         },
         {
-            "name": "CreateWzFile",
+            "name": "ExtractImage",
             "type": "go",
             "request": "launch",
             "mode": "test",
             "program": "${workspaceFolder}",
             "args": [
-                "-test.run=^(TestCreateWzFile)$",
+                "-test.run=^(TestExtractImage)$",
                 "-test.v"
             ]
         },
         {
-            "name": "CopyWzFile",
+            "name": "ExtractAudio",
             "type": "go",
             "request": "launch",
             "mode": "test",
             "program": "${workspaceFolder}",
             "args": [
-                "-test.run=^(TestCopyWzFile)$",
+                "-test.run=^(TestExtractAudio)$",
                 "-test.v"
             ]
         },
         {
-            "name": "CopyWzFiles",
+            "name": "ExtractFont",
             "type": "go",
             "request": "launch",
             "mode": "test",
             "program": "${workspaceFolder}",
             "args": [
-                "-test.run=^(TestCopyWzFiles)$",
+                "-test.run=^(TestExtractFont)$",
+                "-test.v"
+            ]
+        },
+        {
+            "name": "ExtractSkel",
+            "type": "go",
+            "request": "launch",
+            "mode": "test",
+            "program": "${workspaceFolder}",
+            "args": [
+                "-test.run=^(TestExtractSkel)$",
                 "-test.v"
             ]
         },

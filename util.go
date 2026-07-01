@@ -1,7 +1,12 @@
 package wzlib
 
 import (
+	"bytes"
+	"compress/zlib"
+	"encoding/binary"
+	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"math"
 	"math/bits"
@@ -99,7 +104,7 @@ func GetPossibleVersions(versionHashSumTruncated int16) []int16 {
 	for version := range math.MaxUint16 {
 		hashSumTruncated := GetWzVersionHashSumTruncated(int16(version))
 		if uint16(hashSumTruncated) == uint16(versionHashSumTruncated) {
-			if version >= DefaultWzFileMinVersion && version <= DefaultWzFileMaxVersion {
+			if version >= MinVersion && version <= MaxVersion {
 				possibleVersions = append(possibleVersions, int16(version))
 			}
 		}
@@ -119,7 +124,35 @@ func CalcuCheckSum(buf []byte) int32 {
 
 // #region String
 
+func IsJSON(s string) bool {
+	strLen := len(s)
+	if strLen >= 2 {
+		first := s[0]
+		last := s[strLen-1]
+		return first == '{' && last == '}'
+	}
+	return false
+}
+
+func IsJSONArray(s string) bool {
+	strLen := len(s)
+	switch {
+	case strLen == 2:
+		return s[0] == '[' && s[1] == ']'
+	case strLen >= 4:
+		first := s[0]
+		last := s[strLen-1]
+		second := s[1]
+		secondLast := s[strLen-2]
+		return first == '[' && last == ']' && second == '{' && secondLast == '}'
+	}
+	return false
+}
+
 func IsASCII(s string) bool {
+	if IsJSON(s) || IsJSONArray(s) {
+		return true
+	}
 	for _, r := range s {
 		if r > math.MaxInt8 {
 			_, ok := ASCIIWhitelist[r]
@@ -141,6 +174,74 @@ func DumpString(buf []byte) string {
 		}
 	}
 	return builder.String()
+}
+
+func GetFontExt(data []byte) string {
+	if len(data) < 4 {
+		return ".bin"
+	}
+	if binary.BigEndian.Uint32(data[:4]) == 0x10000 {
+		return ".ttf"
+	}
+	if string(data[:4]) == "OTTO" {
+		return ".otf"
+	}
+	return ".bin"
+}
+
+// #endregion
+
+// #region Zlib
+
+func IsZlibHeader(header uint16) bool {
+	zHeader := ZlibHeader(header)
+	switch zHeader {
+	case ZlibNoCompressionHeader,
+		ZlibBestSpeedHeader,
+		ZlibBestCompressionHeader,
+		ZlibDefaultCompressionHeader:
+		return true
+	default:
+		return false
+	}
+}
+
+func ZlibInflate(data []byte) ([]byte, error) {
+	zr, err := zlib.NewReader(bytes.NewReader(data))
+	if err != nil {
+		return nil, err
+	}
+	defer zr.Close()
+
+	raw, err := io.ReadAll(zr)
+	if err != nil {
+		if errors.Is(err, io.ErrUnexpectedEOF) {
+			// Miss Adler32 CheckSum
+			return raw, nil
+		}
+		return nil, err
+	}
+
+	return raw, nil
+}
+
+func ZlibDeflate(raw []byte, level ZlibLevel) ([]byte, error) {
+	var buf bytes.Buffer
+	zw, err := zlib.NewWriterLevel(&buf, int(level))
+	if err != nil {
+		return nil, err
+	}
+	_, err = zw.Write(raw)
+	if err != nil {
+		return nil, err
+	}
+
+	err = zw.Close()
+	if err != nil {
+		return nil, err
+	}
+
+	return buf.Bytes(), nil
 }
 
 // #endregion

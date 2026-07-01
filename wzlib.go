@@ -2,6 +2,7 @@ package wzlib
 
 import (
 	"context"
+	"image"
 	"time"
 )
 
@@ -23,7 +24,8 @@ type IWzFile interface {
 	GetDirectory(nodePath string) (IWzDirectory, error)
 	GetImage(nodePath string) (IWzImage, error)
 	GetPropertyItem(nodePath string) (IWzPropertyItem, error)
-	GetNodesLen() int
+	GetMetaNodeLen() int
+	GetMetaNodeKeys() []string
 	Elapsed() time.Duration
 	Load(filePath string) error
 	ReadHeader(stream IWzStream) error
@@ -55,6 +57,7 @@ type IWzStream interface {
 	DecodeVT8() int64
 	DecodeBuffer(bufLen int64) []byte
 	DecryptBuffer(bufLen int64) []byte
+	DecryptBlock(block []byte) []byte
 	DecodeStr(strLen int64) string
 	DecodeNTStr() string
 	DecodeVTStrLen() (int32, bool)
@@ -140,6 +143,9 @@ type IWzNode interface {
 	GetChild(name string) (IWzNode, error)
 	GetChildByPath(nodePath string) (IWzNode, error)
 	AddChild(node IWzNode)
+	ParseDirectory() (IWzDirectory, error)
+	ParseImage() (IWzImage, error)
+	ParseItem() (IWzPropertyItem, error)
 }
 
 type IWzDirectory interface {
@@ -195,6 +201,8 @@ type IWzCanvas interface {
 	SetMagLevel(magLevel int8)
 	GetData() []byte
 	SetData(data []byte)
+	GetRawData() ([]byte, error)
+	ExtractImage() (*image.RGBA, error)
 }
 
 type IWzVector interface {
@@ -235,6 +243,9 @@ type IWzSound interface {
 	SetFormat(format any)
 	GetData() []byte
 	SetData(data []byte)
+	GetRawData() ([]byte, error)
+	ExtractAudio() ([]byte, error) // MP3/WAV data
+	ExtractBlob() ([]byte, error)  // Font/Spine data
 }
 
 //nolint:iface // interfaces kept separate for semantic clarity

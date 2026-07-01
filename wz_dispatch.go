@@ -2,11 +2,19 @@ package wzlib
 
 import (
 	"log/slog"
+	"strings"
 )
 
 func WzDispatchDeSerialize(parent IWzNode, stream IWzStream) IWzNode {
-	var nameRef int32
+	if strings.Contains(parent.GetName(), ".lua") {
+		// GMS232 Etc.wz/Script/*.lua is NodeImage type
+		node := NewWzLua(parent)
+		node.DeSerialize(stream)
+		parent.AddChild(node)
+		return nil
+	}
 	var name string
+	var nameRef int32
 	flag := FlagType(stream.Decode1())
 	switch flag {
 	case FlagPropName:
@@ -38,20 +46,28 @@ func WzDispatchDeSerialize(parent IWzNode, stream IWzStream) IWzNode {
 		node = NewWzUOL(parent)
 	case NodeNameRawData:
 		node = NewWzRawData(parent)
-	case NodeNameScript:
-		node = NewWzLua(parent)
 	default:
 		slog.Error("Unknown node name", "tag", tag, "offset", stream.GetOffset())
 		return nil
 	}
 	node.SetFlag(flag)
-	node.SetNameRef(nameRef)
 	node.SetName(name)
+	node.SetNameRef(nameRef)
 	node.DeSerialize(stream)
 	return node
 }
 
 func WzDispatchSerialize(node IWzNode, archive IWzArchive) {
+	parentName := node.GetParent().GetName()
+	if strings.Contains(parentName, ".lua") {
+		luaNode := node.GetParent().GetFirstChild()
+		if luaNode == nil {
+			slog.Error("Miss lua node", "parentName", parentName)
+			return
+		}
+		luaNode.Serialize(archive)
+		return
+	}
 	flag := node.GetFlag()
 	archive.Encode1(int8(flag))
 	switch flag {

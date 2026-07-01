@@ -56,8 +56,10 @@ func (pi *wzPropertyItem) DeSerialize(stream IWzStream) {
 	case VTR8:
 		pi.value = stream.Decode8f()
 	case VTBStr:
+		// Flag
 		flag = FlagType(stream.Decode1())
 		pi.valueFlag = flag
+		// Value
 		switch flag {
 		case FlagVTStr:
 			pi.value = stream.DecryptVTStr()

@@ -3,7 +3,8 @@ package wzlib
 type wzLua struct {
 	IWzNode
 
-	data []byte
+	unkFlag int8
+	data    []byte
 }
 
 func NewWzLua(parent IWzNode) IWzLua {
@@ -14,14 +15,14 @@ func NewWzLua(parent IWzNode) IWzLua {
 
 // DeSerialize implements [IWzLua].
 func (n *wzLua) DeSerialize(stream IWzStream) {
-	stream.Skip(1)
+	n.unkFlag = stream.Decode1()
 	dataLen := stream.DecodeVT4()
 	n.data = stream.DecryptBuffer(int64(dataLen))
 }
 
 // Serialize implements [IWzLua].
 func (n *wzLua) Serialize(archive IWzArchive) {
-	archive.Encode1(0)
+	archive.Encode1(n.unkFlag)
 	archive.EncodeVT4(int32(len(n.data)))
 	archive.EncryptBuffer(n.data)
 }

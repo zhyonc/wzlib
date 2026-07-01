@@ -76,7 +76,7 @@ func (f *wzFile) GetStream() IWzStream {
 
 // GetNode implements [IWzFile].
 func (f *wzFile) GetNode(nodePath string) (IWzNode, error) {
-	paths := strings.Split(nodePath, DefaultNodePathSeparator)
+	paths := strings.Split(nodePath, NodePathSeparator)
 	if len(paths) == 0 {
 		return nil, fmt.Errorf("invalid node path %s", nodePath)
 	}
@@ -138,9 +138,14 @@ func (f *wzFile) GetPropertyItem(nodePath string) (IWzPropertyItem, error) {
 	return item, nil
 }
 
-// GetNodesLen implements [IWzFile].
-func (f *wzFile) GetNodesLen() int {
+// GetMetaNodeLen implements [IWzFile].
+func (f *wzFile) GetMetaNodeLen() int {
 	return f.nodeMap.Len()
+}
+
+// GetMetaNodeKeys implements [IWzFile].
+func (f *wzFile) GetMetaNodeKeys() []string {
+	return slices.Collect(f.nodeMap.Keys())
 }
 
 // Elapsed implements [IWzFile].
@@ -209,12 +214,15 @@ func (f *wzFile) ReadHeader(stream IWzStream) error {
 	// Copyright
 	f.copyright = stream.DecodeNTStr()
 	// Version
-	if f.version == 0 {
+	switch f.version {
+	case 0:
 		err := f.PredictVersion(stream)
 		if err != nil {
 			return err
 		}
-	} else {
+	case NoHashVersion:
+		slog.Debug("The version did not encode 2-byte versionHashSumTruncated")
+	default:
 		stream.Skip(2)
 	}
 	return nil
@@ -222,16 +230,19 @@ func (f *wzFile) ReadHeader(stream IWzStream) error {
 
 // PredictVersion implements [IWzFile].
 func (f *wzFile) PredictVersion(stream IWzStream) error {
+	var possibleVersions []int16
 	versionHashSumTruncated := stream.Decode2()
 	if versionHashSumTruncated > 0xFF {
 		// versionHashSumTruncated always less than 256
-		return errors.New("missing version hash sum truncated")
+		possibleVersions = []int16{NoHashVersion}
+		stream.Back(2)
+	} else {
+		possibleVersions = GetPossibleVersions(versionHashSumTruncated)
 	}
-	possibleVersions := GetPossibleVersions(versionHashSumTruncated)
 	if len(possibleVersions) == 0 {
 		return errors.New("missing version")
 	}
-	nodesLen := stream.DecodeVT4() // nodesLen
+	nodesLen := stream.DecodeVT4()
 	validNodeCount := 0
 	backOffset := stream.GetOffset()
 	// Predict version
@@ -268,7 +279,11 @@ func (f *wzFile) PredictVersion(stream IWzStream) error {
 		return errors.New("failed to predict version")
 	}
 	slog.Debug("Predicted version", "number", f.version)
-	stream.SetOffset(int64(f.headerSize) + 2)
+	if f.version == NoHashVersion {
+		stream.SetOffset(int64(f.headerSize))
+	} else {
+		stream.SetOffset(int64(f.headerSize) + 2)
+	}
 	return nil
 }
 
@@ -384,7 +399,9 @@ func (f *wzFile) WriteHeader(archive IWzArchive) error {
 	if f.version == 0 {
 		return errors.New("unknown version")
 	}
-	archive.Encode2(GetWzVersionHashSumTruncated(f.version))
+	if f.version != NoHashVersion {
+		archive.Encode2(GetWzVersionHashSumTruncated(f.version))
+	}
 	return nil
 }
 
@@ -401,7 +418,8 @@ func (f *wzFile) WriteMetaNode(ctx context.Context, archive IWzArchive, parnet I
 	} else {
 		nodes = parnet.GetChilds()
 	}
-	archive.EncodeVT4(int32(len(nodes)))
+	nodesLen := len(nodes)
+	archive.EncodeVT4(int32(nodesLen))
 	for _, node := range nodes {
 		node.Serialize(archive)
 		nType := node.GetType()

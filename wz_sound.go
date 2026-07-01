@@ -1,13 +1,21 @@
 package wzlib
 
+import (
+	"bytes"
+	"encoding/binary"
+	"errors"
+	"fmt"
+	"log/slog"
+)
+
 type WaveFormatEx struct {
-	FormatTag      int16 // MPEGLAYER3(0x55) or PCM(0x01)
+	FormatTag      int16 // PCM(0x01) or MP3Ex(0x55)
 	Channels       int16
 	SamplesPerSec  int32
 	AvgBytesPerSec int32
 	BlockAlign     int16
 	BitsPerSample  int16
-	CBSize         int16 // The count in bytes of the size of extra information
+	CBSize         int16 // Size of extra information in bytes (PCM=0, MP3Ex=12)
 }
 
 func (wave *WaveFormatEx) DeSerialize(stream IWzStream) {
@@ -28,6 +36,16 @@ func (wave *WaveFormatEx) Serialize(archive IWzArchive) {
 	archive.Encode2(wave.BlockAlign)
 	archive.Encode2(wave.BitsPerSample)
 	archive.Encode2(wave.CBSize)
+}
+
+func (wave *WaveFormatEx) Extract(buffer *bytes.Buffer) {
+	binary.Write(buffer, binary.LittleEndian, wave.FormatTag)
+	binary.Write(buffer, binary.LittleEndian, wave.Channels)
+	binary.Write(buffer, binary.LittleEndian, wave.SamplesPerSec)
+	binary.Write(buffer, binary.LittleEndian, wave.AvgBytesPerSec)
+	binary.Write(buffer, binary.LittleEndian, wave.BlockAlign)
+	binary.Write(buffer, binary.LittleEndian, wave.BitsPerSample)
+	binary.Write(buffer, binary.LittleEndian, wave.CBSize)
 }
 
 type MpegLayer3WaveFormat struct {
@@ -58,15 +76,25 @@ func (mp3 *MpegLayer3WaveFormat) Serialize(archive IWzArchive) {
 	archive.Encode2(mp3.CodecDelay)
 }
 
+func (mp3 *MpegLayer3WaveFormat) Extract(buffer *bytes.Buffer) {
+	mp3.WaveFormatEx.Extract(buffer)
+	binary.Write(buffer, binary.LittleEndian, mp3.ID)
+	binary.Write(buffer, binary.LittleEndian, mp3.Flags)
+	binary.Write(buffer, binary.LittleEndian, mp3.BlockSize)
+	binary.Write(buffer, binary.LittleEndian, mp3.FramesPerBlock)
+	binary.Write(buffer, binary.LittleEndian, mp3.CodecDelay)
+}
+
 type wzSound struct {
 	IWzNode
 
+	unkFlag1     int8
 	duration     int32
 	soundType    SoundType
 	mediaType    []byte
 	mediaSubType []byte
-	unkFlag1     int8
 	unkFlag2     int8
+	unkFlag3     int8
 	formatType   []byte
 	format       any
 	soundData    []byte
@@ -80,26 +108,29 @@ func NewWzSound(parent IWzNode) IWzSound {
 
 // DeSerialize implements [IWzSound].
 func (n *wzSound) DeSerialize(stream IWzStream) {
-	stream.Skip(1)
+	n.unkFlag1 = stream.Decode1()
 	soundDataLen := stream.DecodeVT4()
 	n.duration = stream.DecodeVT4()
 	n.soundType = SoundType(stream.Decode1())
 	n.mediaType = stream.DecodeBuffer(16)    // GUID Stream
 	n.mediaSubType = stream.DecodeBuffer(16) // GUID Wave(type2) or MPEG1Audio(type1)
-	n.unkFlag1 = stream.Decode1()            // 0 or 1
-	n.unkFlag2 = stream.Decode1()            // always 1
+	n.unkFlag2 = stream.Decode1()            // 0 or 1
+	n.unkFlag3 = stream.Decode1()            // always 1
 	n.formatType = stream.DecodeBuffer(16)   // GUID FORMAT_WaveFormatEx(type2)
-	if n.soundType == SoundPCM {
+	if n.soundType == SoundWave {
 		formatSize := stream.DecodeVT4()
 		switch formatSize {
 		case WaveFormatExSize:
-			wave := new(WaveFormatEx)
-			wave.DeSerialize(stream)
-			n.format = wave
+			format := new(WaveFormatEx)
+			format.DeSerialize(stream)
+			n.format = format
 		case MpegLayer3WaveFormatSize:
-			mp3 := new(MpegLayer3WaveFormat)
-			mp3.DeSerialize(stream)
-			n.format = mp3
+			format := new(MpegLayer3WaveFormat)
+			format.DeSerialize(stream)
+			n.format = format
+		default:
+			slog.Error("Unsupported sound format type", "offset", stream.GetOffset())
+			return
 		}
 	}
 	n.soundData = stream.DecodeBuffer(int64(soundDataLen))
@@ -107,16 +138,16 @@ func (n *wzSound) DeSerialize(stream IWzStream) {
 
 // Serialize implements [IWzSound].
 func (n *wzSound) Serialize(archive IWzArchive) {
-	archive.Encode1(0)
+	archive.Encode1(n.unkFlag1)
 	archive.EncodeVT4(int32(len(n.soundData)))
 	archive.EncodeVT4(n.duration)
 	archive.Encode1(int8(n.soundType))
 	archive.EncodeBuffer(n.mediaType)
 	archive.EncodeBuffer(n.mediaSubType)
-	archive.Encode1(n.unkFlag1)
 	archive.Encode1(n.unkFlag2)
+	archive.Encode1(n.unkFlag3)
 	archive.EncodeBuffer(n.formatType)
-	if n.soundType == SoundPCM {
+	if n.soundType == SoundWave {
 		switch format := n.format.(type) {
 		case *WaveFormatEx:
 			archive.EncodeVT4(WaveFormatExSize)
@@ -124,6 +155,9 @@ func (n *wzSound) Serialize(archive IWzArchive) {
 		case *MpegLayer3WaveFormat:
 			archive.EncodeVT4(MpegLayer3WaveFormatSize)
 			format.Serialize(archive)
+		default:
+			slog.Error("Unsupported sound format type", "offset", archive.GetOffset())
+			return
 		}
 	}
 	archive.EncodeBuffer(n.soundData)
@@ -202,4 +236,78 @@ func (n *wzSound) GetData() []byte {
 // SetData implements [IWzSound].
 func (n *wzSound) SetData(data []byte) {
 	n.soundData = data
+}
+
+// GetRawData implements [IWzSound].
+func (n *wzSound) GetRawData() ([]byte, error) {
+	raw := make([]byte, len(n.soundData))
+	copy(raw, n.soundData)
+	return raw, nil
+}
+
+// ExtractAudio implements [IWzSound].
+func (n *wzSound) ExtractAudio() ([]byte, error) {
+	raw, err := n.GetRawData()
+	if err != nil {
+		return nil, err
+	}
+	switch n.soundType {
+	case SoundMP3:
+		return raw, nil
+	case SoundWave:
+		buffer := new(bytes.Buffer)
+		// RIFF header
+		buffer.WriteString("RIFF")
+		buffer.Write([]byte{0, 0, 0, 0}) // chunkSize
+		buffer.WriteString("WAVE")
+		// fmt chunk
+		buffer.WriteString("fmt ")
+		var fmtSize int32
+		switch format := n.format.(type) {
+		case *WaveFormatEx:
+			fmtSize = WaveFormatExSize
+			binary.Write(buffer, binary.LittleEndian, fmtSize)
+			format.Extract(buffer)
+		case *MpegLayer3WaveFormat:
+			fmtSize = 30
+			binary.Write(buffer, binary.LittleEndian, fmtSize)
+			format.Extract(buffer)
+		default:
+			return nil, errors.New("unsupported sound format type")
+		}
+		// data chunk
+		buffer.WriteString("data")
+		binary.Write(buffer, binary.LittleEndian, uint32(len(raw)))
+		buffer.Write(raw)
+		// Write chunkSize
+		data := buffer.Bytes()
+		chunkSize := uint32(len(data) - 8)
+		binary.LittleEndian.PutUint32(data[4:8], chunkSize)
+		return data, nil
+	default:
+		return nil, fmt.Errorf("unknown sound type %d", n.soundType)
+	}
+}
+
+// ExtractBlob implements [IWzSound].
+func (n *wzSound) ExtractBlob() ([]byte, error) {
+	if n.duration == 1000 && n.format != nil {
+		var samplesPerSec int32
+		switch format := n.format.(type) {
+		case *WaveFormatEx:
+			samplesPerSec = format.SamplesPerSec
+		case *MpegLayer3WaveFormat:
+			samplesPerSec = format.WaveFormatEx.SamplesPerSec
+		default:
+			return nil, errors.New("unsupported sound format type")
+		}
+		if samplesPerSec != int32(len(n.soundData)) {
+			return nil, errors.New("it's not blob type")
+		}
+	}
+	raw, err := n.GetRawData()
+	if err != nil {
+		return nil, err
+	}
+	return raw, nil
 }
